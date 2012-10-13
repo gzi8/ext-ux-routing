@@ -1,4 +1,6 @@
-﻿bin
-examples
+﻿bin/
+examples/
+.gitignore
+.gitattributes
 build.bat
 build.xml
