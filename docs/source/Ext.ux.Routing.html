@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <title>The source code</title>
+  <link href="../resources/prettify/prettify.css" type="text/css" rel="stylesheet" />
+  <script type="text/javascript" src="../resources/prettify/prettify.js"></script>
+  <style type="text/css">
+    .highlight { display: block; background-color: #ddd; }
+  </style>
+  <script type="text/javascript">
+    function highlight() {
+      document.getElementById(location.hash.replace(/#/, "")).className = "highlight";
+    }
+  </script>
+</head>
+<body onload="prettyPrint(); highlight();">
+  <pre class="prettyprint lang-js"><span id='Ext-ux-Routing'>/**
+</span>* @class Ext.ux.Routing
+* ExtJS 4.x URL routing support. Example usage:
+*
+*      // app init
+*      Ext.application({
+*      name: '...',
+*        autoCreateViewport: true,
+*        models: ['...'],
+*        stores: ['...'],
+*        controllers: ['...'],
+*        launch: function () {
+*          // init routing
+*          Ext.ux.Routing.init({
+*            // the default route, if none given
+*            defaultRoute: '/#!/index',
+*            routes: [
+*            {
+*              pattern: '!/index',
+*              handler: function () {
+*                // calling a controller from the function handler
+*                this.getController('Index').index();
+*              }
+*            },
+*            {
+*              pattern: '!/clients',
+*              handler: function () {
+*                // calling a &quot;non-controller&quot; function in the handler
+*                alert('clients');
+*              }
+*            }, {
+*              pattern: '!/clients/{id}',
+*              handler: function () {
+*                // getting tokens from the arguments in the handler function
+*                var args = arguments[0];
+*                this.getController('Client').read(args.id);
+*              }
+*            }
+*            ],
+*            scope: this
+*          });
+*        }
+*      });
+*
+* @author: Bostjan Rihter &lt;bostjan.rihter@gmail.com&gt;
+* @singleton
+*/
+Ext.define('Ext.ux.Routing', {
+<span id='Ext-ux-Routing-property-routes'>  // #region properties
+</span>  // private
+  routes: null,
+  singleton: true,
+  // #endregion
+  // #region methods
+<span id='Ext-ux-Routing-method-init'>  /**
+</span>  * Initializes the routing.
+  * @param {Object} cfg The routing configuration object.
+  * @param {String} cfg.defaultRoute The default route to navigate to if there is none given (default controller and action); i.e.: &quot;/#!/index/&quot;.
+  * @param {Array} cfg.routes The array of route objects. Every route object consists of the following 2 parameters:
+  * @param {String} cfg.routes.pattern The route pattern. The dynamic parts of the route (tokens) are written as &quot;{tokenName}&quot;; i.e.: &quot;/#!/article/{articleId}/{articleTitle}&quot;.
+  * @param {Function} cfg.routes.handler The routes corresponding function handler.
+  * @method
+  */
+  init: function (cfg) {
+    var history = Ext.util.History;
+    // validate
+    if (!Ext.isDefined(cfg)) {
+      cfg = {};
+    }
+    if (!Ext.isDefined(cfg.routes)) {
+      cfg.routes = [];
+    }
+    var routes = this.tokenizeRoutes(cfg.routes);
+    cfg.routes = routes;
+    Ext.apply(this, cfg);
+    history.on('change', this.onRouteChange, this);
+    history.init();
+    // if no token, use the default route
+    if (!history.getToken()) {
+      this.navigate(cfg.defaultRoute);
+    } else {
+      this.onRouteChange(history.getToken());
+    }
+  },
+<span id='Ext-ux-Routing-method-tokenizeRoutes'>  // private
+</span>  tokenizeRoutes: function (routes) {
+    var i,
+    routeTokens = null,
+    sortedRoutes = new Ext.util.MixedCollection();
+    // tokenize
+    for (i = 0; i &lt; routes.length; ++i) {
+      routeTokens = this.tokenizeRoute(routes[i].pattern);
+      sortedRoutes.add(routes[i].pattern, {
+        pattern: routes[i].pattern,
+        tokens: routeTokens,
+        handler: routes[i].handler
+      });
+    }
+    // sort, so hardcoded routes get priority over dynamic ones
+    // i.e.: &quot;/clients/new&quot; will have higher priority than &quot;/clients/{id}&quot;
+    sortedRoutes.sortByKey();
+    return sortedRoutes;
+  },
+<span id='Ext-ux-Routing-method-tokenizeRoute'>  // private
+</span>  tokenizeRoute: function (route) {
+    var i,
+    tokens = route.split('/'),
+      re = /\{(.*?)\}/,
+      dynamic,
+      tokenizedRoute = [];
+    // skip first -&gt; usually /#/ or /!#/
+    for (i = 1; i &lt; tokens.length; ++i) {
+      // skip empty
+      if (tokens[i] === '') continue;
+      // is token static || dynamic
+      dynamic = re.test(tokens[i]);
+      // add to parsed tokens
+      tokenizedRoute.push({
+        token: tokens[i],
+        dynamic: dynamic
+      });
+    }
+    return tokenizedRoute;
+  },
+<span id='Ext-ux-Routing-method-navigate'>  /**
+</span>  * Navigates to a specific url.
+  * @param {String} url The absolute url, starting with a forward slash; i.e.: &quot;/#!/article/123/lorem-ipsum&quot;.
+  * @method
+  */
+  navigate: function (url) {
+    window.location.href = url;
+  },
+<span id='Ext-ux-Routing-method-back'>  /**
+</span>  * Navigates one url back.
+  * @method
+  */
+  back: function () {
+    history.go(-1);
+  },
+<span id='Ext-ux-Routing-method-onRouteChange'>  // #endregion
+</span>  // #region event handlers
+  // private
+  onRouteChange: function (route) {
+    if (!route) return;
+    var tokens,
+    routeTokens,
+    i,
+    match;
+    // get the tokenized route
+    routeTokens = this.tokenizeRoute(route);
+    // check if we have a match
+    for (i = 0; i &lt; this.routes.length; ++i) {
+      tokens = this.routes.getAt(i).tokens;
+      if (routeTokens.length != tokens.length) continue;
+      // check every token part if its a route match
+      // if the token is dynamic, then treat it as a match
+      match = true;
+      for (j = 0; j &lt; tokens.length; ++j) {
+        if (tokens[j].dynamic) continue;
+        if (tokens[j].token != routeTokens[j].token) {
+          match = false;
+          break;
+        }
+      }
+      if (match) break;
+    }
+    // no match
+    if (!match) return;
+    // pass all the dynamic tokens as parameters
+    var params = {},
+    //tokens = this.routes[i].tokens,
+    tokens = this.routes.getAt(i).tokens,
+      key;
+    for (j = 0; j &lt; tokens.length; ++j) {
+      if (tokens[j].dynamic) {
+        key = tokens[j].token;
+        key = key.substring(1, key.length - 1);
+        val = routeTokens[j].token;
+        params[key] = val;
+      }
+    }
+    // finally, route
+    this.routes.getAt(i).handler.call(this.scope, params);
+  }
+  // #endregion
+});</pre>
+</body>
+</html>
